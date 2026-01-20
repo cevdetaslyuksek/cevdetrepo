@@ -1,289 +1,277 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Mini Traffic Racer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Mini Traffic Racer</title>
 
-<style>
-body {
-  margin: 0;
-  background: #111;
-  color: #fff;
-  font-family: Arial, sans-serif;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  overflow: hidden;
-  touch-action: none;
-}
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-#info {
-  position: absolute;
-  top: 10px;
-  width: 100%;
-  text-align: center;
-  font-size: 14px;
-  z-index: 10;
-}
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
 
-canvas {
-  background: #333;
-  border: 2px solid #555;
-}
-</style>
+    canvas {
+      background: #333;
+      border: 2px solid #555;
+    }
+
+    #hud {
+      position: absolute;
+      top: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 20px;
+      font-size: 14px;
+      z-index: 10;
+    }
+  </style>
 </head>
-
 <body>
 
-<div id="info">
-  Skor: <span id="score">0</span>
+<div id="hud">
+  <div>❤️ <span id="lives">3</span></div>
+  <div>Skor: <span id="score">0</span></div>
 </div>
 
 <canvas id="game"></canvas>
 
 <script>
+/*******************
+ * CANVAS SETUP
+ *******************/
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const scoreEl = document.getElementById("score");
 
-canvas.width = Math.min(400, window.innerWidth);
-canvas.height = Math.min(600, window.innerHeight);
+function resizeCanvas() {
+  canvas.width = Math.min(400, window.innerWidth);
+  canvas.height = Math.min(600, window.innerHeight * 0.9);
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
-const laneCount = 3;
-const laneWidth = canvas.width / laneCount;
-
-let speed = 6; // 🚀 daha hızlı başlangıç
-let score = 0;
-let lives = 3;
+/*******************
+ * GAME STATE
+ *******************/
+let gameRunning = true;
 let gameOver = false;
+let score = 0;
+let speed = 5; // DAHA HIZLI
+let lives = 3;
 
-/* ===== SHAKE ===== */
-let shakeTime = 0;
-let shakeStrength = 8;
+/*******************
+ * CONSTANTS
+ *******************/
+const laneCount = 3;
+let laneWidth = () => canvas.width / laneCount;
 
-/* ===== IMAGES ===== */
-const playerImg = new Image();
-playerImg.src = "player.png";
-
-const enemyImages = [];
-["enemy1.png", "enemy2.png"].forEach(src => {
-  const img = new Image();
-  img.src = src;
-  enemyImages.push(img);
+/*******************
+ * IMAGES
+ *******************/
+const playerImg = new Image(); playerImg.src = "player.png";
+const enemyImgs = ["enemy1.png", "enemy2.png"].map(src => {
+  const i = new Image(); i.src = src; return i;
 });
+const crashImg = new Image(); crashImg.src = "crash.png";
 
-const explosionImg = new Image();
-explosionImg.src = "crash.png";
-
-/* ===== SOUND ===== */
+/*******************
+ * SOUNDS
+ *******************/
 const engineSound = new Audio("engine.mp3");
 engineSound.loop = true;
 engineSound.volume = 0.4;
 
 const crashSound = new Audio("crash.mp3");
-crashSound.volume = 0.7;
+crashSound.volume = 0.8;
 
-const explosionSound = new Audio("explosion.mp3");
-explosionSound.volume = 1;
+let audioStarted = false;
+function startAudio() {
+  if (!audioStarted) {
+    engineSound.play().catch(()=>{});
+    audioStarted = true;
+  }
+}
+canvas.addEventListener("touchstart", startAudio, { passive:true });
+canvas.addEventListener("click", startAudio);
 
-/* ===== PLAYER ===== */
+/*******************
+ * PLAYER
+ *******************/
 const player = {
   lane: 1,
-  y: canvas.height - 140,
-  width: laneWidth - 30,
-  height: 110
+  width: () => laneWidth() - 30,
+  height: 110,
+  y: () => canvas.height - 140
 };
 
-/* ===== ENEMIES ===== */
+/*******************
+ * ENEMIES
+ *******************/
 let enemies = [];
-let explosions = [];
 
 function spawnEnemy() {
+  if (!gameRunning) return;
   enemies.push({
     lane: Math.floor(Math.random() * laneCount),
-    y: -150,
-    width: laneWidth - 30,
+    y: -140,
+    width: laneWidth() - 30,
     height: 110,
-    img: enemyImages[Math.floor(Math.random() * enemyImages.length)],
+    img: enemyImgs[Math.floor(Math.random()*enemyImgs.length)],
     hit: false
   });
 }
 
-/* ===== ROAD ===== */
+/*******************
+ * DRAW ROAD
+ *******************/
 function drawRoad() {
-  ctx.fillStyle = "#444";
+  ctx.fillStyle = "#222";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.strokeStyle = "#fff";
   ctx.setLineDash([20, 20]);
-
   for (let i = 1; i < laneCount; i++) {
     ctx.beginPath();
-    ctx.moveTo(i * laneWidth, 0);
-    ctx.lineTo(i * laneWidth, canvas.height);
+    ctx.moveTo(i * laneWidth(), 0);
+    ctx.lineTo(i * laneWidth(), canvas.height);
     ctx.stroke();
   }
-
   ctx.setLineDash([]);
 }
 
-/* ===== COLLISION (GERÇEK HİTBOX) ===== */
-function collide(a, b) {
-  const ax = a.lane * laneWidth + 15;
-  const bx = b.lane * laneWidth + 15;
+/*******************
+ * GAME OVER SCREEN
+ *******************/
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0,0,0,0.8)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  return (
-    ax < bx + b.width - 10 &&
-    ax + a.width - 10 > bx &&
-    a.y < b.y + b.height - 10 &&
-    a.y + a.height - 10 > b.y
-  );
+  ctx.drawImage(crashImg, canvas.width/2 - 80, canvas.height/2 - 120, 160, 200);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 24px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("OYUN BİTTİ", canvas.width/2, canvas.height/2 + 110);
+  ctx.font = "14px Arial";
+  ctx.fillText("Tekrar başlamak için dokun", canvas.width/2, canvas.height/2 + 140);
 }
 
-/* ===== EXPLOSION ===== */
-function createExplosion(x, y) {
-  explosions.push({ x, y, size: 40, life: 20 });
-  explosionSound.currentTime = 0;
-  explosionSound.play();
-}
-
-/* ===== GAME LOOP ===== */
+/*******************
+ * UPDATE LOOP
+ *******************/
 function update() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!gameRunning) return;
 
-  if (shakeTime > 0) {
-    shakeTime--;
-    ctx.save();
-    ctx.translate(
-      (Math.random() - 0.5) * shakeStrength,
-      (Math.random() - 0.5) * shakeStrength
-    );
-  }
-
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   drawRoad();
 
-  // Player
-  ctx.drawImage(
-    playerImg,
-    player.lane * laneWidth + 10,
-    player.y,
-    player.width,
+  // PLAYER
+  ctx.drawImage(playerImg,
+    player.lane * laneWidth() + 15,
+    player.y(),
+    player.width(),
     player.height
   );
 
-  // Enemies
+  // ENEMIES
   enemies.forEach(e => {
     e.y += speed;
-
-    ctx.drawImage(
-      e.img,
-      e.lane * laneWidth + 10,
+    ctx.drawImage(e.img,
+      e.lane * laneWidth() + 15,
       e.y,
       e.width,
       e.height
     );
 
-    if (!e.hit && collide(player, e)) {
+    // COLLISION
+    if (!e.hit && e.lane === player.lane &&
+        e.y + e.height > player.y() &&
+        e.y < player.y() + player.height) {
+
       e.hit = true;
       lives--;
+      document.getElementById("lives").textContent = lives;
 
-      shakeTime = 15;
       crashSound.currentTime = 0;
-      crashSound.play();
+      crashSound.play().catch(()=>{});
+
+      if (navigator.vibrate) navigator.vibrate(200);
 
       if (lives <= 0) {
-        createExplosion(
-          player.lane * laneWidth + laneWidth / 2,
-          player.y
-        );
+        lives = 0;
+        gameRunning = false;
         gameOver = true;
         engineSound.pause();
+        drawGameOver();
       }
     }
   });
 
-  // Explosions
-  explosions.forEach(ex => {
-    ex.life--;
-    ex.size += 2;
+  enemies = enemies.filter(e => e.y < canvas.height + 200 && !e.hit);
 
-    ctx.globalAlpha = ex.life / 20;
-    ctx.drawImage(
-      explosionImg,
-      ex.x - ex.size / 2,
-      ex.y - ex.size / 2,
-      ex.size,
-      ex.size
-    );
-    ctx.globalAlpha = 1;
-  });
-
-  explosions = explosions.filter(e => e.life > 0);
-
-  enemies = enemies.filter(e => e.y < canvas.height + 200);
-
-  // Score
+  // SCORE
   score++;
-  scoreEl.textContent = score;
-
-  // Speed ramp
-  if (score % 150 === 0) speed += 0.7;
-
-  // Lives UI
-  ctx.fillStyle = "#fff";
-  ctx.fillText("❤️ " + lives, 10, 20);
-
-  if (shakeTime > 0) ctx.restore();
-
-  if (gameOver) {
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "24px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("OYUN BİTTİ", canvas.width / 2, 300);
-    ctx.font = "14px Arial";
-    ctx.fillText("Tekrar başlamak için dokun", canvas.width / 2, 340);
-  }
+  document.getElementById("score").textContent = score;
+  if (score % 200 === 0) speed += 0.5;
 }
 
-/* ===== CONTROLS ===== */
+/*******************
+ * CONTROLS
+ *******************/
+let startX = null;
+canvas.addEventListener("touchstart", e => startX = e.touches[0].clientX);
+canvas.addEventListener("touchend", e => {
+  if (!gameRunning) restartGame();
+  const dx = e.changedTouches[0].clientX - startX;
+  if (dx > 40 && player.lane < laneCount-1) player.lane++;
+  if (dx < -40 && player.lane > 0) player.lane--;
+});
+
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft" && player.lane > 0) player.lane--;
-  if (e.key === "ArrowRight" && player.lane < laneCount - 1) player.lane++;
+  if (e.key === "ArrowRight" && player.lane < laneCount-1) player.lane++;
+  if (!gameRunning) restartGame();
 });
 
-/* ===== SWIPE ===== */
-let touchStartX = 0;
-canvas.addEventListener("touchstart", e => touchStartX = e.touches[0].clientX);
-canvas.addEventListener("touchend", e => {
-  const diff = e.changedTouches[0].clientX - touchStartX;
-  if (diff > 40 && player.lane < laneCount - 1) player.lane++;
-  if (diff < -40 && player.lane > 0) player.lane--;
-});
+/*******************
+ * RESTART
+ *******************/
+function restartGame() {
+  score = 0;
+  speed = 5;
+  lives = 3;
+  enemies = [];
+  gameRunning = true;
+  gameOver = false;
+  document.getElementById("score").textContent = score;
+  document.getElementById("lives").textContent = lives;
+  engineSound.play().catch(()=>{});
+}
 
-/* ===== RESTART ===== */
-canvas.addEventListener("click", () => {
-  if (gameOver) {
-    enemies = [];
-    explosions = [];
-    score = 0;
-    lives = 3;
-    speed = 6;
-    gameOver = false;
-    engineSound.play();
-  }
-});
+/*******************
+ * START
+ *******************/
+setInterval(update, 1000/60);
+setInterval(spawnEnemy, 1100);
 
-/* ===== START ===== */
-engineSound.play();
-setInterval(update, 1000 / 60);
-setInterval(spawnEnemy, 900);
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js');
+}
 </script>
-
 </body>
 </html>
-
