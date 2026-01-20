@@ -73,12 +73,12 @@ const enemyImages = [];
 const crashImg = new Image();
 crashImg.src = "crash.png";
 
-/* ===== PLAYER ===== */
+/* ===== PLAYER (KÜÇÜK BOYUT) ===== */
 const player = {
   lane: 1,
-  y: canvas.height - 190,
-  width: laneWidth - 10,
-  height: 150
+  y: canvas.height - 140,
+  width: laneWidth - 30,
+  height: 110
 };
 
 /* ===== ENEMIES ===== */
@@ -90,9 +90,9 @@ function spawnEnemy() {
 
   enemies.push({
     lane,
-    y: -200,
-    width: laneWidth - 10,
-    height: 150,
+    y: -140,
+    width: laneWidth - 30,
+    height: 110,
     img,
     hit: false
   });
@@ -152,7 +152,7 @@ function update() {
 
   ctx.drawImage(
     playerImg,
-    player.lane * laneWidth + 5,
+    player.lane * laneWidth + 10,
     player.y,
     player.width,
     player.height
@@ -162,7 +162,7 @@ function update() {
     e.y += speed;
     ctx.drawImage(
       e.img,
-      e.lane * laneWidth + 5,
+      e.lane * laneWidth + 10,
       e.y,
       e.width,
       e.height
@@ -180,7 +180,7 @@ function update() {
     }
   });
 
-  enemies = enemies.filter(e => e.y < canvas.height + 200);
+  enemies = enemies.filter(e => e.y < canvas.height + 150);
 
   score++;
   scoreEl.textContent = score;
