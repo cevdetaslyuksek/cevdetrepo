@@ -38,7 +38,7 @@ canvas {
 <body>
 
 <div id="info">
-  ⬅️ ➡️ Kaydır | Skor: <span id="score">0</span>
+  Skor: <span id="score">0</span>
 </div>
 
 <canvas id="game"></canvas>
@@ -54,14 +54,14 @@ canvas.height = Math.min(600, window.innerHeight);
 const laneCount = 3;
 const laneWidth = canvas.width / laneCount;
 
-let speed = 4;
+let speed = 6; // 🚀 daha hızlı başlangıç
 let score = 0;
 let lives = 3;
 let gameOver = false;
 
-/* ===== SCREEN SHAKE ===== */
+/* ===== SHAKE ===== */
 let shakeTime = 0;
-let shakeStrength = 6;
+let shakeStrength = 8;
 
 /* ===== IMAGES ===== */
 const playerImg = new Image();
@@ -74,12 +74,19 @@ const enemyImages = [];
   enemyImages.push(img);
 });
 
-const crashImg = new Image();
-crashImg.src = "crash.png";
+const explosionImg = new Image();
+explosionImg.src = "crash.png";
 
 /* ===== SOUND ===== */
+const engineSound = new Audio("engine.mp3");
+engineSound.loop = true;
+engineSound.volume = 0.4;
+
 const crashSound = new Audio("crash.mp3");
-crashSound.volume = 0.6;
+crashSound.volume = 0.7;
+
+const explosionSound = new Audio("explosion.mp3");
+explosionSound.volume = 1;
 
 /* ===== PLAYER ===== */
 const player = {
@@ -91,17 +98,15 @@ const player = {
 
 /* ===== ENEMIES ===== */
 let enemies = [];
+let explosions = [];
 
 function spawnEnemy() {
-  const lane = Math.floor(Math.random() * laneCount);
-  const img = enemyImages[Math.floor(Math.random() * enemyImages.length)];
-
   enemies.push({
-    lane,
-    y: -140,
+    lane: Math.floor(Math.random() * laneCount),
+    y: -150,
     width: laneWidth - 30,
     height: 110,
-    img,
+    img: enemyImages[Math.floor(Math.random() * enemyImages.length)],
     hit: false
   });
 }
@@ -113,7 +118,6 @@ function drawRoad() {
 
   ctx.strokeStyle = "#fff";
   ctx.setLineDash([20, 20]);
-  ctx.lineWidth = 2;
 
   for (let i = 1; i < laneCount; i++) {
     ctx.beginPath();
@@ -121,50 +125,34 @@ function drawRoad() {
     ctx.lineTo(i * laneWidth, canvas.height);
     ctx.stroke();
   }
+
   ctx.setLineDash([]);
 }
 
-/* ===== UI ===== */
-function drawUI() {
-  ctx.fillStyle = "#fff";
-  ctx.font = "16px Arial";
-  ctx.fillText("❤️ Can: " + lives, 10, 25);
-}
+/* ===== COLLISION (GERÇEK HİTBOX) ===== */
+function collide(a, b) {
+  const ax = a.lane * laneWidth + 15;
+  const bx = b.lane * laneWidth + 15;
 
-/* ===== GAME OVER ===== */
-function drawGameOver() {
-  ctx.fillStyle = "rgba(0,0,0,0.8)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.drawImage(crashImg, canvas.width/2 - 100, 120, 200, 260);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 26px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("OYUN BİTTİ", canvas.width / 2, 420);
-
-  ctx.font = "16px Arial";
-  ctx.fillText("Tekrar başlamak için dokun", canvas.width / 2, 460);
-}
-
-/* ===== COLLISION ===== */
-function isColliding(a, b) {
-  const margin = 18;
   return (
-    a.lane === b.lane &&
-    b.y + b.height - margin > a.y + margin &&
-    b.y + margin < a.y + a.height - margin
+    ax < bx + b.width - 10 &&
+    ax + a.width - 10 > bx &&
+    a.y < b.y + b.height - 10 &&
+    a.y + a.height - 10 > b.y
   );
+}
+
+/* ===== EXPLOSION ===== */
+function createExplosion(x, y) {
+  explosions.push({ x, y, size: 40, life: 20 });
+  explosionSound.currentTime = 0;
+  explosionSound.play();
 }
 
 /* ===== GAME LOOP ===== */
 function update() {
-  if (gameOver) {
-    drawGameOver();
-    return;
-  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // SCREEN SHAKE
   if (shakeTime > 0) {
     shakeTime--;
     ctx.save();
@@ -174,10 +162,9 @@ function update() {
     );
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawRoad();
-  drawUI();
 
+  // Player
   ctx.drawImage(
     playerImg,
     player.lane * laneWidth + 10,
@@ -186,8 +173,10 @@ function update() {
     player.height
   );
 
+  // Enemies
   enemies.forEach(e => {
     e.y += speed;
+
     ctx.drawImage(
       e.img,
       e.lane * laneWidth + 10,
@@ -196,27 +185,69 @@ function update() {
       e.height
     );
 
-    if (!e.hit && isColliding(player, e)) {
+    if (!e.hit && collide(player, e)) {
       e.hit = true;
       lives--;
 
-      // EFFECTS
       shakeTime = 15;
       crashSound.currentTime = 0;
       crashSound.play();
 
-      if (lives <= 0) gameOver = true;
+      if (lives <= 0) {
+        createExplosion(
+          player.lane * laneWidth + laneWidth / 2,
+          player.y
+        );
+        gameOver = true;
+        engineSound.pause();
+      }
     }
   });
 
-  enemies = enemies.filter(e => e.y < canvas.height + 150);
+  // Explosions
+  explosions.forEach(ex => {
+    ex.life--;
+    ex.size += 2;
 
+    ctx.globalAlpha = ex.life / 20;
+    ctx.drawImage(
+      explosionImg,
+      ex.x - ex.size / 2,
+      ex.y - ex.size / 2,
+      ex.size,
+      ex.size
+    );
+    ctx.globalAlpha = 1;
+  });
+
+  explosions = explosions.filter(e => e.life > 0);
+
+  enemies = enemies.filter(e => e.y < canvas.height + 200);
+
+  // Score
   score++;
   scoreEl.textContent = score;
 
-  if (score % 200 === 0) speed += 0.5;
+  // Speed ramp
+  if (score % 150 === 0) speed += 0.7;
+
+  // Lives UI
+  ctx.fillStyle = "#fff";
+  ctx.fillText("❤️ " + lives, 10, 20);
 
   if (shakeTime > 0) ctx.restore();
+
+  if (gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("OYUN BİTTİ", canvas.width / 2, 300);
+    ctx.font = "14px Arial";
+    ctx.fillText("Tekrar başlamak için dokun", canvas.width / 2, 340);
+  }
 }
 
 /* ===== CONTROLS ===== */
@@ -227,30 +258,32 @@ document.addEventListener("keydown", e => {
 
 /* ===== SWIPE ===== */
 let touchStartX = 0;
-canvas.addEventListener("touchstart", e => {
-  touchStartX = e.touches[0].clientX;
-});
+canvas.addEventListener("touchstart", e => touchStartX = e.touches[0].clientX);
 canvas.addEventListener("touchend", e => {
   const diff = e.changedTouches[0].clientX - touchStartX;
-  if (diff > 50 && player.lane < laneCount - 1) player.lane++;
-  if (diff < -50 && player.lane > 0) player.lane--;
+  if (diff > 40 && player.lane < laneCount - 1) player.lane++;
+  if (diff < -40 && player.lane > 0) player.lane--;
 });
 
 /* ===== RESTART ===== */
 canvas.addEventListener("click", () => {
   if (gameOver) {
     enemies = [];
+    explosions = [];
     score = 0;
     lives = 3;
-    speed = 4;
+    speed = 6;
     gameOver = false;
+    engineSound.play();
   }
 });
 
 /* ===== START ===== */
+engineSound.play();
 setInterval(update, 1000 / 60);
-setInterval(spawnEnemy, 1200);
+setInterval(spawnEnemy, 900);
 </script>
 
 </body>
 </html>
+
