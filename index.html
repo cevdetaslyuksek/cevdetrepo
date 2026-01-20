@@ -59,6 +59,10 @@ let score = 0;
 let lives = 3;
 let gameOver = false;
 
+/* ===== SCREEN SHAKE ===== */
+let shakeTime = 0;
+let shakeStrength = 6;
+
 /* ===== IMAGES ===== */
 const playerImg = new Image();
 playerImg.src = "player.png";
@@ -73,7 +77,11 @@ const enemyImages = [];
 const crashImg = new Image();
 crashImg.src = "crash.png";
 
-/* ===== PLAYER (KÜÇÜK BOYUT) ===== */
+/* ===== SOUND ===== */
+const crashSound = new Audio("crash.mp3");
+crashSound.volume = 0.6;
+
+/* ===== PLAYER ===== */
 const player = {
   lane: 1,
   y: canvas.height - 140,
@@ -139,11 +147,31 @@ function drawGameOver() {
   ctx.fillText("Tekrar başlamak için dokun", canvas.width / 2, 460);
 }
 
+/* ===== COLLISION ===== */
+function isColliding(a, b) {
+  const margin = 18;
+  return (
+    a.lane === b.lane &&
+    b.y + b.height - margin > a.y + margin &&
+    b.y + margin < a.y + a.height - margin
+  );
+}
+
 /* ===== GAME LOOP ===== */
 function update() {
   if (gameOver) {
     drawGameOver();
     return;
+  }
+
+  // SCREEN SHAKE
+  if (shakeTime > 0) {
+    shakeTime--;
+    ctx.save();
+    ctx.translate(
+      (Math.random() - 0.5) * shakeStrength,
+      (Math.random() - 0.5) * shakeStrength
+    );
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -168,14 +196,15 @@ function update() {
       e.height
     );
 
-    if (
-      !e.hit &&
-      e.lane === player.lane &&
-      e.y + e.height > player.y &&
-      e.y < player.y + player.height
-    ) {
+    if (!e.hit && isColliding(player, e)) {
       e.hit = true;
       lives--;
+
+      // EFFECTS
+      shakeTime = 15;
+      crashSound.currentTime = 0;
+      crashSound.play();
+
       if (lives <= 0) gameOver = true;
     }
   });
@@ -186,21 +215,21 @@ function update() {
   scoreEl.textContent = score;
 
   if (score % 200 === 0) speed += 0.5;
+
+  if (shakeTime > 0) ctx.restore();
 }
 
-/* ===== KEYBOARD ===== */
+/* ===== CONTROLS ===== */
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft" && player.lane > 0) player.lane--;
   if (e.key === "ArrowRight" && player.lane < laneCount - 1) player.lane++;
 });
 
-/* ===== SWIPE CONTROL ===== */
+/* ===== SWIPE ===== */
 let touchStartX = 0;
-
 canvas.addEventListener("touchstart", e => {
   touchStartX = e.touches[0].clientX;
 });
-
 canvas.addEventListener("touchend", e => {
   const diff = e.changedTouches[0].clientX - touchStartX;
   if (diff > 50 && player.lane < laneCount - 1) player.lane++;
