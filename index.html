@@ -3,275 +3,233 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Mini Traffic Racer</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#111111">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Flappy Bird – Mobil & PC Uyumlu</title>
 
   <style>
-    body {
+    * {
       margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
       background: #111;
-      color: #fff;
-      font-family: Arial, sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
-      overflow: hidden;
-      touch-action: none;
     }
 
     canvas {
-      background: #333;
-      border: 2px solid #555;
+      background: linear-gradient(#4ec0ca, #e0f7fa);
+      border-radius: 12px;
     }
 
-    #hud {
-      position: absolute;
+    #fsBtn {
+      position: fixed;
       top: 10px;
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      padding: 0 20px;
-      font-size: 14px;
+      right: 10px;
       z-index: 10;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
     }
   </style>
 </head>
+
 <body>
-
-<div id="hud">
-  <div>❤️ <span id="lives">3</span></div>
-  <div>Skor: <span id="score">0</span></div>
-</div>
-
 <canvas id="game"></canvas>
+<button id="fsBtn">Tam Ekran</button>
 
 <script>
-/*******************
- * CANVAS SETUP
- *******************/
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
 
+/* ================= CANVAS ================= */
 function resizeCanvas() {
-  canvas.width = Math.min(400, window.innerWidth);
-  canvas.height = Math.min(600, window.innerHeight * 0.9);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+window.addEventListener('resize', resizeCanvas);
 
-/*******************
- * GAME STATE
- *******************/
-let gameRunning = true;
-let gameOver = false;
-let score = 0;
-let speed = 5; // DAHA HIZLI
-let lives = 3;
-
-/*******************
- * CONSTANTS
- *******************/
-const laneCount = 3;
-let laneWidth = () => canvas.width / laneCount;
-
-/*******************
- * IMAGES
- *******************/
-const playerImg = new Image(); playerImg.src = "player.png";
-const enemyImgs = ["enemy1.png", "enemy2.png"].map(src => {
-  const i = new Image(); i.src = src; return i;
-});
-const crashImg = new Image(); crashImg.src = "crash.png";
-
-/*******************
- * SOUNDS
- *******************/
-const engineSound = new Audio("engine.mp3");
-engineSound.loop = true;
-engineSound.volume = 0.4;
-
-const crashSound = new Audio("crash.mp3");
-crashSound.volume = 0.8;
-
-let audioStarted = false;
-function startAudio() {
-  if (!audioStarted) {
-    engineSound.play().catch(()=>{});
-    audioStarted = true;
+/* ================= FULLSCREEN ================= */
+const fsBtn = document.getElementById('fsBtn');
+fsBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
   }
-}
-canvas.addEventListener("touchstart", startAudio, { passive:true });
-canvas.addEventListener("click", startAudio);
+});
 
-/*******************
- * PLAYER
- *******************/
-const player = {
-  lane: 1,
-  width: () => laneWidth() - 30,
-  height: 110,
-  y: () => canvas.height - 140
+/* ================= KUŞ GÖRSEL ================= */
+const birdImg = new Image();
+birdImg.src = 'bird.png'; // aynı klasörde olmalı
+
+/* ================= KUŞ ================= */
+let bird = {
+  x: 120,
+  y: 260,
+  w: 90,
+  h: 90,
+  v: 0
 };
 
-/*******************
- * ENEMIES
- *******************/
-let enemies = [];
+/* ORANSAL HITBOX */
+const birdHitboxRatio = {
+  x: 0.35,
+  y: 0.30
+};
 
-function spawnEnemy() {
-  if (!gameRunning) return;
-  enemies.push({
-    lane: Math.floor(Math.random() * laneCount),
-    y: -140,
-    width: laneWidth() - 30,
-    height: 110,
-    img: enemyImgs[Math.floor(Math.random()*enemyImgs.length)],
-    hit: false
+/* ================= FİZİK ================= */
+const gravity = 0.13;
+const jump = -6;
+
+/* ================= BORULAR ================= */
+let pipes = [];
+let frame = 0;
+let score = 0;
+let gameOver = false;
+
+const pipeWidth = 52;
+const pipePaddingRatio = 0.28;
+
+function addPipe() {
+  const gap = Math.max(150, 200 - score * 6);
+  const top = Math.random() * 150 + 60;
+  pipes.push({
+    x: canvas.width,
+    top,
+    bottom: top + gap,
+    passed: false
   });
 }
 
-/*******************
- * DRAW ROAD
- *******************/
-function drawRoad() {
-  ctx.fillStyle = "#222";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.strokeStyle = "#fff";
-  ctx.setLineDash([20, 20]);
-  for (let i = 1; i < laneCount; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * laneWidth(), 0);
-    ctx.lineTo(i * laneWidth(), canvas.height);
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
+/* ================= RESET ================= */
+function resetGame() {
+  bird.y = canvas.height / 2;
+  bird.v = 0;
+  pipes = [];
+  score = 0;
+  frame = 0;
+  gameOver = false;
 }
 
-/*******************
- * GAME OVER SCREEN
- *******************/
-function drawGameOver() {
-  ctx.fillStyle = "rgba(0,0,0,0.8)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  ctx.drawImage(crashImg, canvas.width/2 - 80, canvas.height/2 - 120, 160, 200);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 24px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("OYUN BİTTİ", canvas.width/2, canvas.height/2 + 110);
-  ctx.font = "14px Arial";
-  ctx.fillText("Tekrar başlamak için dokun", canvas.width/2, canvas.height/2 + 140);
-}
-
-/*******************
- * UPDATE LOOP
- *******************/
+/* ================= UPDATE ================= */
 function update() {
-  if (!gameRunning) return;
+  if (gameOver) return;
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawRoad();
+  bird.v += gravity;
+  bird.v *= 0.99;
+  bird.y += bird.v;
 
-  // PLAYER
-  ctx.drawImage(playerImg,
-    player.lane * laneWidth() + 15,
-    player.y(),
-    player.width(),
-    player.height
-  );
+  if (frame % 120 === 0) addPipe();
 
-  // ENEMIES
-  enemies.forEach(e => {
-    e.y += speed;
-    ctx.drawImage(e.img,
-      e.lane * laneWidth() + 15,
-      e.y,
-      e.width,
-      e.height
-    );
+  const speed = 1.3 + score * 0.06;
+  pipes.forEach(p => p.x -= speed);
+  pipes = pipes.filter(p => p.x > -pipeWidth);
 
-    // COLLISION
-    if (!e.hit && e.lane === player.lane &&
-        e.y + e.height > player.y() &&
-        e.y < player.y() + player.height) {
+  // KUŞ HITBOX
+  const padX = bird.w * birdHitboxRatio.x;
+  const padY = bird.h * birdHitboxRatio.y;
 
-      e.hit = true;
-      lives--;
-      document.getElementById("lives").textContent = lives;
+  const bx = bird.x + padX;
+  const by = bird.y + padY;
+  const bw = bird.w - padX * 2;
+  const bh = bird.h - padY * 2;
 
-      crashSound.currentTime = 0;
-      crashSound.play().catch(()=>{});
+  pipes.forEach(p => {
+    const pipePad = pipeWidth * pipePaddingRatio;
+    const px1 = p.x + pipePad;
+    const px2 = p.x + pipeWidth - pipePad;
 
-      if (navigator.vibrate) navigator.vibrate(200);
+    if (
+      bx + bw > px1 &&
+      bx < px2 &&
+      (by < p.top || by + bh > p.bottom)
+    ) {
+      gameOver = true;
+    }
 
-      if (lives <= 0) {
-        lives = 0;
-        gameRunning = false;
-        gameOver = true;
-        engineSound.pause();
-        drawGameOver();
-      }
+    if (!p.passed && p.x + pipeWidth < bird.x) {
+      p.passed = true;
+      score++;
     }
   });
 
-  enemies = enemies.filter(e => e.y < canvas.height + 200 && !e.hit);
+  // ZEMİN / TAVAN
+  if (bird.y + bird.h > canvas.height + 10 || bird.y < -10) {
+    gameOver = true;
+  }
 
-  // SCORE
-  score++;
-  document.getElementById("score").textContent = score;
-  if (score % 200 === 0) speed += 0.5;
+  frame++;
 }
 
-/*******************
- * CONTROLS
- *******************/
-let startX = null;
-canvas.addEventListener("touchstart", e => startX = e.touches[0].clientX);
-canvas.addEventListener("touchend", e => {
-  if (!gameRunning) restartGame();
-  const dx = e.changedTouches[0].clientX - startX;
-  if (dx > 40 && player.lane < laneCount-1) player.lane++;
-  if (dx < -40 && player.lane > 0) player.lane--;
-});
+/* ================= DRAW ================= */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-document.addEventListener("keydown", e => {
-  if (e.key === "ArrowLeft" && player.lane > 0) player.lane--;
-  if (e.key === "ArrowRight" && player.lane < laneCount-1) player.lane++;
-  if (!gameRunning) restartGame();
-});
+  // KUŞ
+  ctx.drawImage(birdImg, bird.x, bird.y, bird.w, bird.h);
 
-/*******************
- * RESTART
- *******************/
-function restartGame() {
-  score = 0;
-  speed = 5;
-  lives = 3;
-  enemies = [];
-  gameRunning = true;
-  gameOver = false;
-  document.getElementById("score").textContent = score;
-  document.getElementById("lives").textContent = lives;
-  engineSound.play().catch(()=>{});
+  // BORULAR
+  ctx.fillStyle = '#1e8449';
+  pipes.forEach(p => {
+    ctx.fillRect(p.x, 0, pipeWidth, p.top);
+    ctx.fillRect(p.x, p.bottom, pipeWidth, canvas.height);
+  });
+
+  // SKOR
+  ctx.fillStyle = '#000';
+  ctx.font = '20px Arial';
+  ctx.fillText('Skor: ' + score, 12, 28);
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = '28px Arial';
+    ctx.fillText('Bitti', canvas.width / 2 - 35, canvas.height / 2 - 10);
+    ctx.font = '16px Arial';
+    ctx.fillText(
+      'Dokun / Tıkla → Tekrar Başla',
+      canvas.width / 2 - 95,
+      canvas.height / 2 + 20
+    );
+  }
 }
 
-/*******************
- * START
- *******************/
-setInterval(update, 1000/60);
-setInterval(spawnEnemy, 1100);
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js');
+/* ================= LOOP ================= */
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
+
+/* ================= INPUT ================= */
+function jumpBird() {
+  if (gameOver) {
+    resetGame();
+  } else {
+    bird.v = 0;
+    bird.v = jump;
+  }
+}
+
+// PC
+canvas.addEventListener('click', jumpBird);
+
+// MOBİL
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  jumpBird();
+}, { passive: false });
+
+loop();
 </script>
 </body>
 </html>
