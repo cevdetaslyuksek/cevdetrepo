@@ -1,43 +1,39 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Flappy Bird – Mobil & PC Uyumlu</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Flappy Bird – Çarpma Sesli</title>
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    body {
-      background: #111;
-      overflow: hidden;
-      touch-action: manipulation;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
+  body {
+    background: #111;
+    overflow: hidden;
+    touch-action: manipulation;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
 
-    canvas {
-      background: linear-gradient(#4ec0ca, #e0f7fa);
-      border-radius: 12px;
-    }
+  canvas {
+    background: linear-gradient(#4ec0ca, #e0f7fa);
+    border-radius: 12px;
+  }
 
-    #fsBtn {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      padding: 8px 12px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-  </style>
+  #fsBtn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+</style>
 </head>
 
 <body>
@@ -45,32 +41,66 @@
 <button id="fsBtn">Tam Ekran</button>
 
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-/* ================= CANVAS ================= */
+/* ========== CANVAS ========== */
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener("resize", resizeCanvas);
 
-/* ================= FULLSCREEN ================= */
-const fsBtn = document.getElementById('fsBtn');
-fsBtn.addEventListener('click', () => {
+/* ========== FULLSCREEN ========== */
+document.getElementById("fsBtn").onclick = () => {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen();
   } else {
     document.exitFullscreen();
   }
-});
+};
 
-/* ================= KUŞ GÖRSEL ================= */
+/* ========== ZIPLAMA SESİ (BOUNCE) ========== */
+let audioCtx = null;
+
+function playBounceSound() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "square";
+  osc.frequency.value = 520;
+
+  gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,
+    audioCtx.currentTime + 0.15
+  );
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.15);
+}
+
+/* ========== ÇARPMA SESİ (DOSYADAN) ========== */
+const crashSound = new Audio("crash.mp3");
+crashSound.preload = "auto";
+
+function playCrashSound() {
+  crashSound.currentTime = 0;
+  crashSound.play();
+}
+
+/* ========== KUŞ ========== */
 const birdImg = new Image();
-birdImg.src = 'bird.png'; // aynı klasörde olmalı
+birdImg.src = "bird.png";
 
-/* ================= KUŞ ================= */
 let bird = {
   x: 120,
   y: 260,
@@ -79,21 +109,18 @@ let bird = {
   v: 0
 };
 
-/* ORANSAL HITBOX */
-const birdHitboxRatio = {
-  x: 0.35,
-  y: 0.30
-};
+const birdHitboxRatio = { x: 0.35, y: 0.30 };
 
-/* ================= FİZİK ================= */
+/* ========== FİZİK ========== */
 const gravity = 0.13;
 const jump = -6;
 
-/* ================= BORULAR ================= */
+/* ========== BORULAR ========== */
 let pipes = [];
 let frame = 0;
 let score = 0;
 let gameOver = false;
+let crashPlayed = false;
 
 const pipeWidth = 52;
 const pipePaddingRatio = 0.28;
@@ -109,7 +136,6 @@ function addPipe() {
   });
 }
 
-/* ================= RESET ================= */
 function resetGame() {
   bird.y = canvas.height / 2;
   bird.v = 0;
@@ -117,14 +143,14 @@ function resetGame() {
   score = 0;
   frame = 0;
   gameOver = false;
+  crashPlayed = false;
 }
 
-/* ================= UPDATE ================= */
+/* ========== UPDATE ========== */
 function update() {
   if (gameOver) return;
 
   bird.v += gravity;
-  bird.v *= 0.99;
   bird.y += bird.v;
 
   if (frame % 120 === 0) addPipe();
@@ -133,7 +159,6 @@ function update() {
   pipes.forEach(p => p.x -= speed);
   pipes = pipes.filter(p => p.x > -pipeWidth);
 
-  // KUŞ HITBOX
   const padX = bird.w * birdHitboxRatio.x;
   const padY = bird.h * birdHitboxRatio.y;
 
@@ -152,7 +177,7 @@ function update() {
       bx < px2 &&
       (by < p.top || by + bh > p.bottom)
     ) {
-      gameOver = true;
+      triggerGameOver();
     }
 
     if (!p.passed && p.x + pipeWidth < bird.x) {
@@ -161,70 +186,72 @@ function update() {
     }
   });
 
-  // ZEMİN / TAVAN
-  if (bird.y + bird.h > canvas.height + 10 || bird.y < -10) {
-    gameOver = true;
+  if (bird.y + bird.h > canvas.height || bird.y < 0) {
+    triggerGameOver();
   }
 
   frame++;
 }
 
-/* ================= DRAW ================= */
+/* ========== GAME OVER ========== */
+function triggerGameOver() {
+  if (!crashPlayed) {
+    playCrashSound();
+    crashPlayed = true;
+  }
+  gameOver = true;
+}
+
+/* ========== DRAW ========== */
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // KUŞ
   ctx.drawImage(birdImg, bird.x, bird.y, bird.w, bird.h);
 
-  // BORULAR
-  ctx.fillStyle = '#1e8449';
+  ctx.fillStyle = "#1e8449";
   pipes.forEach(p => {
     ctx.fillRect(p.x, 0, pipeWidth, p.top);
     ctx.fillRect(p.x, p.bottom, pipeWidth, canvas.height);
   });
 
-  // SKOR
-  ctx.fillStyle = '#000';
-  ctx.font = '20px Arial';
-  ctx.fillText('Skor: ' + score, 12, 28);
+  ctx.fillStyle = "#000";
+  ctx.font = "20px Arial";
+  ctx.fillText("Skor: " + score, 12, 28);
 
   if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#fff';
-    ctx.font = '28px Arial';
-    ctx.fillText('Bitti', canvas.width / 2 - 35, canvas.height / 2 - 10);
-    ctx.font = '16px Arial';
+    ctx.fillStyle = "#fff";
+    ctx.font = "28px Arial";
+    ctx.fillText("Bitti", canvas.width / 2 - 35, canvas.height / 2);
+    ctx.font = "16px Arial";
     ctx.fillText(
-      'Dokun / Tıkla → Tekrar Başla',
-      canvas.width / 2 - 95,
-      canvas.height / 2 + 20
+      "Dokun / Tıkla → Tekrar",
+      canvas.width / 2 - 85,
+      canvas.height / 2 + 30
     );
   }
 }
 
-/* ================= LOOP ================= */
+/* ========== LOOP ========== */
 function loop() {
   update();
   draw();
   requestAnimationFrame(loop);
 }
 
-/* ================= INPUT ================= */
+/* ========== INPUT ========== */
 function jumpBird() {
   if (gameOver) {
     resetGame();
   } else {
-    bird.v = 0;
+    playBounceSound();
     bird.v = jump;
   }
 }
 
-// PC
-canvas.addEventListener('click', jumpBird);
-
-// MOBİL
-canvas.addEventListener('touchstart', (e) => {
+canvas.addEventListener("click", jumpBird);
+canvas.addEventListener("touchstart", e => {
   e.preventDefault();
   jumpBird();
 }, { passive: false });
