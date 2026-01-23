@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Flappy Bird – Mobil Optimize</title>
+<title>Flappy Bird – Mobil Affedici</title>
 
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body {
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
   background:#111;
   overflow:hidden;
   touch-action:manipulation;
 }
-canvas {
+canvas{
   background:linear-gradient(#4ec0ca,#e0f7fa);
   display:block;
 }
@@ -23,166 +23,192 @@ canvas {
 <canvas id="game"></canvas>
 
 <script>
+/* ================== CANVAS ================== */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-/* ========= CANVAS OPTİMİZASYON ========= */
-let DPR = Math.min(window.devicePixelRatio, 1.5); // 🔥 MOBİL KURTARICI
+const DPR = Math.min(window.devicePixelRatio, 1.5);
 
-function resizeCanvas() {
-  canvas.style.width = window.innerWidth + "px";
-  canvas.style.height = window.innerHeight + "px";
-  canvas.width = window.innerWidth * DPR;
-  canvas.height = window.innerHeight * DPR;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+function resizeCanvas(){
+  canvas.style.width = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  canvas.width = innerWidth * DPR;
+  canvas.height = innerHeight * DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
 resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+addEventListener("resize", resizeCanvas);
 
-/* ========= SES ========= */
+/* ================== SESLER ================== */
 let audioCtx;
 function playBounceSound(){
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(!audioCtx) audioCtx=new (AudioContext||webkitAudioContext)();
   const o=audioCtx.createOscillator();
   const g=audioCtx.createGain();
   o.frequency.value=520;
-  g.gain.value=0.15;
+  g.gain.value=0.12;
   o.connect(g); g.connect(audioCtx.destination);
   o.start(); o.stop(audioCtx.currentTime+0.12);
 }
-const crashSound=new Audio("crash.mp3");
 
-/* ========= KUŞ ========= */
-const birdImg=new Image();
-birdImg.src="bird.png";
+const crashSound = new Audio("crash.mp3");
 
-let bird={
-  x:120,y:200,w:70,h:70,v:0
+/* ================== KUŞ ================== */
+const birdImg = new Image();
+birdImg.src = "bird.png";
+
+let bird = {
+  x: 120,
+  y: 200,
+  w: 64,
+  h: 64,
+  v: 0
 };
 
-const gravity=1400;   // px/s²
-const jump=-420;      // px/s
+// 🔥 KÜÇÜK HITBOX (AFFEDİCİ)
+const hitboxPadding = {
+  x: 18,
+  y: 14
+};
 
-/* ========= BORULAR ========= */
-let pipes=[];
-let score=0;
-let gameOver=false;
+/* ================== FİZİK ================== */
+const gravity = 1350; // px/s²
+const jump = -420;
 
-const pipeWidth=52;
-const gapBase=190;
-const speedBase=220;
+/* ================== BORULAR ================== */
+let pipes = [];
+let score = 0;
+let gameOver = false;
+
+const pipeWidth = 56;
+const gapBase = 240;      // 🔥 geniş gap
+const speedBase = 220;
 
 function addPipe(){
-  const gap=Math.max(140,gapBase-score*4);
-  const top=Math.random()*200+50;
+  const gap = Math.max(190, gapBase - score * 3);
+  const top = Math.random() * 220 + 40;
+
   pipes.push({
-    x:canvas.width/DPR,
+    x: canvas.width / DPR,
     top,
-    bottom:top+gap,
-    passed:false
+    bottom: top + gap,
+    passed: false
   });
 }
 
-/* ========= RESET ========= */
+/* ================== RESET ================== */
 function resetGame(){
-  bird.y=canvas.height/DPR/2;
-  bird.v=0;
-  pipes=[];
-  score=0;
-  gameOver=false;
+  bird.y = canvas.height / DPR / 2;
+  bird.v = 0;
+  pipes = [];
+  score = 0;
+  gameOver = false;
 }
 
-/* ========= ZAMAN TABANLI LOOP ========= */
-let lastTime=0;
-let pipeTimer=0;
+/* ================== UPDATE ================== */
+let lastTime = 0;
+let pipeTimer = 0;
 
 function update(dt){
   if(gameOver) return;
 
-  bird.v+=gravity*dt;
-  bird.y+=bird.v*dt;
+  bird.v += gravity * dt;
+  bird.y += bird.v * dt;
 
-  pipeTimer+=dt;
-  if(pipeTimer>1.8){
+  pipeTimer += dt;
+  if(pipeTimer > 1.8){
     addPipe();
-    pipeTimer=0;
+    pipeTimer = 0;
   }
 
-  const speed=speedBase+score*12;
-  pipes.forEach(p=>p.x-=speed*dt);
-  pipes=pipes.filter(p=>p.x>-pipeWidth);
+  const speed = speedBase + score * 10;
+  pipes.forEach(p => p.x -= speed * dt);
+  pipes = pipes.filter(p => p.x > -pipeWidth);
 
-  pipes.forEach(p=>{
+  // 🔥 HITBOX HESABI
+  const bx = bird.x + hitboxPadding.x;
+  const by = bird.y + hitboxPadding.y;
+  const bw = bird.w - hitboxPadding.x * 2;
+  const bh = bird.h - hitboxPadding.y * 2;
+
+  pipes.forEach(p => {
+    const pipePad = 12; // 🔥 boru toleransı
+
     if(
-      bird.x+bird.w>p.x &&
-      bird.x<p.x+pipeWidth &&
-      (bird.y<p.top || bird.y+bird.h>p.bottom)
+      bx + bw > p.x + pipePad &&
+      bx < p.x + pipeWidth - pipePad &&
+      (by < p.top || by + bh > p.bottom)
     ){
-      gameOver=true;
-      crashSound.currentTime=0;
+      gameOver = true;
+      crashSound.currentTime = 0;
       crashSound.play();
     }
 
-    if(!p.passed && p.x+pipeWidth<bird.x){
-      p.passed=true;
+    if(!p.passed && p.x + pipeWidth < bird.x){
+      p.passed = true;
       score++;
     }
   });
 
-  if(bird.y+bird.h>canvas.height/DPR || bird.y<0){
-    gameOver=true;
-    crashSound.currentTime=0;
+  if(bird.y + bird.h > canvas.height / DPR || bird.y < -10){
+    gameOver = true;
+    crashSound.currentTime = 0;
     crashSound.play();
   }
 }
 
-/* ========= DRAW ========= */
+/* ================== DRAW ================== */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  ctx.drawImage(birdImg,bird.x,bird.y,bird.w,bird.h);
+  ctx.drawImage(birdImg, bird.x, bird.y, bird.w, bird.h);
 
-  ctx.fillStyle="#1e8449";
-  pipes.forEach(p=>{
-    ctx.fillRect(p.x,0,pipeWidth,p.top);
-    ctx.fillRect(p.x,p.bottom,pipeWidth,canvas.height/DPR);
+  ctx.fillStyle = "#1e8449";
+  pipes.forEach(p => {
+    ctx.fillRect(p.x, 0, pipeWidth, p.top);
+    ctx.fillRect(p.x, p.bottom, pipeWidth, canvas.height / DPR);
   });
 
-  ctx.fillStyle="#000";
-  ctx.font="20px Arial";
-  ctx.fillText("Skor: "+score,15,30);
+  ctx.fillStyle = "#000";
+  ctx.font = "20px Arial";
+  ctx.fillText("Skor: " + score, 15, 30);
 
   if(gameOver){
     ctx.fillStyle="rgba(0,0,0,.6)";
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle="#fff";
     ctx.font="26px Arial";
-    ctx.fillText("Bitti",canvas.width/DPR/2-30,canvas.height/DPR/2);
+    ctx.fillText("Bitti", canvas.width/DPR/2 - 30, canvas.height/DPR/2);
     ctx.font="16px Arial";
-    ctx.fillText("Dokun → Tekrar",canvas.width/DPR/2-55,canvas.height/DPR/2+30);
+    ctx.fillText(
+      "Dokun / Tıkla → Tekrar",
+      canvas.width/DPR/2 - 85,
+      canvas.height/DPR/2 + 30
+    );
   }
 }
 
-/* ========= LOOP ========= */
+/* ================== LOOP ================== */
 function loop(t){
-  const dt=(t-lastTime)/1000;
-  lastTime=t;
+  const dt = (t - lastTime) / 1000;
+  lastTime = t;
   update(dt);
   draw();
   requestAnimationFrame(loop);
 }
 
-/* ========= INPUT ========= */
+/* ================== INPUT ================== */
 function jumpBird(){
   if(gameOver){
     resetGame();
   }else{
     playBounceSound();
-    bird.v=jump;
+    bird.v = jump;
   }
 }
-canvas.addEventListener("click",jumpBird);
-canvas.addEventListener("touchstart",e=>{
+
+canvas.addEventListener("click", jumpBird);
+canvas.addEventListener("touchstart", e=>{
   e.preventDefault();
   jumpBird();
 },{passive:false});
